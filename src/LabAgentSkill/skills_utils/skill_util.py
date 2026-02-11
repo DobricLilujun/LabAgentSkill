@@ -228,7 +228,7 @@ def parse_skills_from_json_response(json_response: str, skills_hub_dir: str) -> 
         matched_skills = [
             skills_lookup[skill_name.lower()]
             for skill_name in skill_names
-            if skill_name.lower() in skills_lookup
+            if skill_name.lower() in skills_lookup.keys()
         ]
         
         return matched_skills

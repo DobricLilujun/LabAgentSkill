@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import re
 
+from openai import BadRequestError
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent, AgentState
 from langchain.agents.middleware import before_model
@@ -25,7 +26,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 from langchain_core.runnables import RunnableConfig
-
+import uuid
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
 # ============================================================================
 # GLOBAL CONFIGURATION
@@ -79,7 +81,9 @@ class SkillAwareAgent:
         use_trim_messages: bool = True,
         thread_id: str = "1",
         temperature: float = None,
-        max_tokens: int = None
+        max_tokens: int = None,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ):
         """
         Initialize the Skill-Aware Agent.
@@ -92,6 +96,10 @@ class SkillAwareAgent:
             thread_id: Thread ID for checkpointed conversation state
             temperature: Temperature for LLM generation
             max_tokens: Maximum tokens in response
+            base_url: Base URL for the API endpoint (e.g. "http://localhost:8000/v1"
+                      for a local vLLM server). If None, uses the default OpenAI endpoint.
+            api_key: API key override. For local vLLM you can pass "EMPTY" or any
+                     dummy string. If None, falls back to OPENAI_API_KEY env var.
         """
         self.use_chat_history = use_chat_history
         self.use_trim_messages = use_trim_messages
@@ -99,18 +107,21 @@ class SkillAwareAgent:
         self.system_prompt = system_prompt
         self.chat_history = InMemoryChatMessageHistory()
         self.runtime_config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        self.model = model
         
-        # Initialize the LLM
-        if temperature is not None and max_tokens is not None:
-            self.llm = ChatOpenAI(
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-        else:
-            self.llm = ChatOpenAI(
-                model=model
-            )
+        # Initialize the LLM — build kwargs dynamically so that only
+        # explicitly provided parameters are forwarded to ChatOpenAI.
+        llm_kwargs: Dict[str, Any] = {"model": model}
+        if temperature is not None:
+            llm_kwargs["temperature"] = temperature
+        if max_tokens is not None:
+            llm_kwargs["max_tokens"] = max_tokens
+        if base_url is not None:
+            llm_kwargs["base_url"] = base_url
+        if api_key is not None:
+            llm_kwargs["api_key"] = api_key
+
+        self.llm = ChatOpenAI(**llm_kwargs)
         
         middleware = [trim_messages] if use_trim_messages else []
         
@@ -124,6 +135,8 @@ class SkillAwareAgent:
         
         print(f"✓ SkillAwareAgent initialized")
         print(f"  Model: {model}")
+        if base_url:
+            print(f"  Base URL: {base_url}")
         print(f"  Chat History: {'ENABLED ✓' if use_chat_history else 'DISABLED ✗'}")
         print(f"  Trim Messages: {'ENABLED ✓' if use_trim_messages else 'DISABLED ✗'}")
     
@@ -155,12 +168,41 @@ class SkillAwareAgent:
         
         # Invoke agent (checkpointer automatically manages history if enabled)
         if custom_system_prompt is not None:
-            system_message = SystemMessage(content=custom_system_prompt)
+            system_message = custom_system_prompt
         else:
-            system_message = SystemMessage(content=self.system_prompt)
+            system_message = self.system_prompt
         
-        result = self.agent.invoke({"messages": [system_message, HumanMessage(content=user_input)]}, runtime_config)
-        
+        # Retry loop: on context-length BadRequestError, halve user_input and retry
+        MAX_TRUNCATION_RETRIES = 5
+        current_input = user_input
+        current_system_message = system_message 
+        for attempt in range(MAX_TRUNCATION_RETRIES + 1):
+            try:
+                if "google" in self.model.lower():
+                    result = self.agent.invoke(
+                        {"messages": [HumanMessage(content=current_system_message + current_input)]},
+                        runtime_config,
+                    )
+                else:
+                    result = self.agent.invoke(
+                        {"messages": [SystemMessage(content=current_system_message), HumanMessage(content=current_input)]},
+                        runtime_config,
+                    )
+                break  # success
+            except BadRequestError as e:
+                err_msg = str(e).lower()
+                if "context length" in err_msg or "maximum" in err_msg and "token" in err_msg:
+                    if attempt < MAX_TRUNCATION_RETRIES:
+                        old_len = len(current_input)
+                        current_input = current_input[: old_len // 2]
+                        runtime_config["configurable"]["thread_id"] = str(uuid.uuid4())  # Clear history to free up context space
+                        # runtime_config["middleware"] = [REMOVE_ALL_MESSAGES()]  # Clear messages in the graph
+                    else:
+                        print("✗ Context length still exceeded after max retries. Re-raising.")
+                        raise
+                else:
+                    raise  # unrelated BadRequestError, don't swallow it
+
         # Extract response
         if isinstance(result, dict):
             if 'messages' in result:
@@ -185,7 +227,7 @@ class SkillAwareAgent:
     def clear_history(self) -> None:
         """Clear the default chat history."""
         self.chat_history.clear()
-        print("✓ Chat history cleared")
+        # print("✓ Chat history cleared")
     
     def get_history_summary(self) -> Dict[str, Any]:
         """
@@ -325,6 +367,51 @@ class SkillAwareAgent:
         print(f"\n╔" + "═"*78 + "╗")
         print(f"║ Summary: {total_turns} turn(s) | {total_msgs} message(s) {' '*42} ║")
         print("╚" + "═"*78 + "╝\n")
+    
+    def get_human_ai_message_history(self) -> List[Dict[str, str]]:
+        """
+        Return chat history as a list of dicts with alternating human and AI messages.
+        
+        Each dict contains:
+            - role: "human" or "ai"
+            - content: The message content string
+            - turn: The conversation turn number (1-indexed)
+        
+        Returns:
+            List of message dicts, e.g.:
+            [
+                {"role": "human", "content": "...", "turn": 1},
+                {"role": "ai",    "content": "...", "turn": 1},
+                {"role": "human", "content": "...", "turn": 2},
+                ...
+            ]
+        """
+        messages = self.chat_history.messages
+        history = []
+        turn = 0
+
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                turn += 1
+                history.append({
+                    "role": "human",
+                    "content": msg.content,
+                    "turn": turn,
+                })
+            elif isinstance(msg, AIMessage):
+                # Extract content safely
+                content = msg.content
+                if isinstance(content, dict):
+                    content = str(content.get("messages", content))
+                elif not isinstance(content, str):
+                    content = str(content)
+                history.append({
+                    "role": "ai",
+                    "content": content,
+                    "turn": turn,
+                })
+
+        return history
     
     def export_conversation_to_text(self, filepath: Path) -> None:
         """

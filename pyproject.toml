@@ -13,4 +13,5 @@ dependencies = [
     "tavily-python>=0.7.21",
     "vllm>=0.15.1",
     "strictyaml>=1.7.3",
+    "scikit-learn>=1.8.0",
 ]
