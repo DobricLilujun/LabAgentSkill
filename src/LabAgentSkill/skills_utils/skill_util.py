@@ -258,3 +258,18 @@ def parse_message_from_json_response(json_response: str) -> str:
         return str(message).strip()
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return json_response.strip()
+    
+def get_random_skills(skills_metadata: List[Dict[str, Any]], num_skills: int) -> List[Dict[str, Any]]:
+    """
+    Randomly sample a specified number of skills from the skills metadata.
+    
+    Args:
+        skills_metadata: List of skill metadata dictionaries
+        num_skills: Number of random skills to sample
+    Returns:
+        List of randomly sampled skill metadata dictionaries    
+    """
+    import random
+    if num_skills >= len(skills_metadata):
+        return skills_metadata
+    return random.sample(skills_metadata, num_skills)
