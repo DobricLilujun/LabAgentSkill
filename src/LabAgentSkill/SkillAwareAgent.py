@@ -28,7 +28,7 @@ from langgraph.runtime import Runtime
 from langchain_core.runnables import RunnableConfig
 import uuid
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-
+from langchain_anthropic import ChatAnthropic
 # ============================================================================
 # GLOBAL CONFIGURATION
 # ============================================================================
@@ -121,7 +121,11 @@ class SkillAwareAgent:
         if api_key is not None:
             llm_kwargs["api_key"] = api_key
 
-        self.llm = ChatOpenAI(**llm_kwargs)
+        if "claude"in model.lower():
+            self.llm = ChatAnthropic(**llm_kwargs)
+        else:
+            self.llm = ChatOpenAI(**llm_kwargs)
+
         
         middleware = [trim_messages] if use_trim_messages else []
         
@@ -172,6 +176,8 @@ class SkillAwareAgent:
         else:
             system_message = self.system_prompt
         
+        if "claude"in self.model.lower():
+            runtime_config["configurable"]["thread_id"] = str(uuid.uuid4())
         # Retry loop: on context-length BadRequestError, halve user_input and retry
         MAX_TRUNCATION_RETRIES = 5
         current_input = user_input
