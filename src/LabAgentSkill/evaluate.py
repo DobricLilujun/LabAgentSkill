@@ -1,5 +1,9 @@
 # All Related evaluation method for LabAgentSkill should be placed here. 
 # For example, if you want to evaluate the accuracy of a classification skill, you can implement a function like `get_predicted_label` to extract the predicted label from the skill's output, and then compare it with the true label to calculate accuracy metrics.
+import re
+
+
+from sympy import re
 
 
 def get_predicted_label(message_classification: str) -> str:
@@ -200,4 +204,17 @@ def get_prediction_XBRL_TAGS(message: str) -> str:
     if ci_matches:
         return max(ci_matches, key=len)
 
+    return "unknown"
+
+
+
+_yes = re.compile(r"\byes\b", re.IGNORECASE)
+_no  = re.compile(r"\bno\b",  re.IGNORECASE)
+
+def get_insurBench_predicted_label(message_classification: str) -> str:
+    s = message_classification.strip()
+    if _yes.search(s):
+        return "YES"
+    if _no.search(s):
+        return "NO"
     return "unknown"
