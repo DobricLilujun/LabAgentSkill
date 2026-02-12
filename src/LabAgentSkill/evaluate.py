@@ -3,8 +3,6 @@
 import re
 
 
-from sympy import re
-
 
 def get_predicted_label(message_classification: str) -> str:
     """Determine predicted label from a classification string."""
