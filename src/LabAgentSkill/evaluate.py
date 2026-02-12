@@ -216,3 +216,12 @@ def get_insurBench_predicted_label(message_classification: str) -> str:
     if _no.search(s):
         return "NO"
     return "unknown"
+
+
+def get_insurBench_predicted_label_v2(message_classification: str) -> str:
+    s = message_classification.strip().lower()
+    if "yes" in s:
+        return "YES"
+    if "no" in s:
+        return "NO"
+    return "unknown"
