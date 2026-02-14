@@ -273,3 +273,16 @@ def get_random_skills(skills_metadata: List[Dict[str, Any]], num_skills: int) ->
     if num_skills >= len(skills_metadata):
         return skills_metadata
     return random.sample(skills_metadata, num_skills)
+
+
+import re
+
+def replace_skills(text, replacement="capability"):
+    if replacement.endswith('y'):
+        plural = replacement[:-1] + 'ies'
+    else:
+        plural = replacement + 's'
+    
+    text = re.sub(r"\bskill\b", replacement, text, flags=re.IGNORECASE)
+    text = re.sub(r"\bskills?\b", plural, text, flags=re.IGNORECASE)
+    return text
