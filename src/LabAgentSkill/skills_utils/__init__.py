@@ -5,7 +5,7 @@ from .models import SkillProperties
 from .parser import find_skill_md, read_properties
 from .prompt import to_prompt
 from .validator import validate
-from .skill_util import read_all_skills_metadata, display_skills_metadata, list_skills_in_folder, parse_skill_from_response, parse_skills_from_json_response, parse_message_from_json_response, get_random_skills
+from .skill_util import read_all_skills_metadata, display_skills_metadata, list_skills_in_folder, parse_skill_from_response, parse_skills_from_json_response, parse_message_from_json_response, get_random_skills,replace_skills
 
 __all__ = [
     "SkillError",
