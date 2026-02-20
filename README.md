@@ -2,7 +2,7 @@
 
 LabAgentSkill is a **skill-driven agent experimentation workspace** focused on evaluating agent behaviors with experiments in the industrial usecase to verify if SLMs can effectively leverage skills to solve complex tasks.
 
-![LabAgentSkill Logo](assets/photos/logo_agent_skill.png)
+![LabAgentSkill Logo](logo_agent_skill.png)
 
 ## Key Features
 
