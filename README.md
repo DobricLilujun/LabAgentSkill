@@ -59,29 +59,11 @@ LabAgentSkill/
 │   └── skillTemp/                 # Temporary / work-in-progress skills
 │
 ├── scripts/                       # Standalone benchmark execution scripts
-│   ├── test_agent_finer_300_stadard-claude.py   # FiNER benchmark with Claude
-│   └── visualize_agent_result.py                # HTML visualization of agent results
-│
-├── notebooks/                     # Jupyter experiment notebooks (22 notebooks)
-│   ├── test_agent_imdb_300_*.ipynb              # IMDB experiments across models
-│   ├── test_agent_finer_300_*.ipynb             # FiNER experiments across models
-│   ├── test_agent_insurbench_300_*.ipynb        # InsurBench experiments
-│   ├── test_agent_skill_scaling_standard.ipynb  # Skill scaling experiment
-│   ├── test_agent_multi_run.ipynb               # Multi-run aggregation
-│   └── test_dataset_*.ipynb                     # Dataset exploration notebooks
-│
-├── assets/
-│   ├── datasets/                  # Raw benchmark datasets
-│   │   ├── aclImdb/               # IMDB movie review dataset
-│   │   ├── finer-139/             # FiNER-139 financial NER dataset
-│   │   └── insureBench.jsonl      # InsurBench insurance email dataset
-│   ├── results/                   # JSONL output files from experiments
-│   └── photos/                    # Project images and logos
-│
-└── refs/                          # Reference implementations and documentation
+    ├── test_agent_finer_300_stadard-claude.py   # FiNER benchmark with Claude
+    └── visualize_agent_result.py                # HTML visualization of agent results
+
 ```
 
----
 
 # Agent Pipeline
 
