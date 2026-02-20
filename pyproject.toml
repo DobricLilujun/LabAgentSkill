@@ -15,4 +15,6 @@ dependencies = [
     "strictyaml>=1.7.3",
     "scikit-learn>=1.8.0",
     "matplotlib>=3.10.8",
+    "plotly>=6.5.2",
+    "kaleido>=1.2.0",
 ]

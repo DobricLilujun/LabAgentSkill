@@ -1,6 +1,15 @@
 """
 Visualize Agent Result as HTML
-Generates an interactive HTML visualization of LangChain/LangGraph agent results
+
+Generates an interactive, self-contained HTML visualization of LangChain/LangGraph
+agent execution results. The output includes:
+  - Summary statistics (total / user / assistant message counts)
+  - A styled, color-coded message timeline
+  - A collapsible raw JSON view of the full result dictionary
+
+Usage:
+    from visualize_agent_result import save_result_to_html
+    save_result_to_html(agent_result_dict, "output.html")
 """
 
 import json
@@ -11,36 +20,48 @@ from typing import Any, Dict, Optional
 
 def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = None) -> str:
     """
-    Generate an HTML visualization of agent result
-    
+    Generate a complete, self-contained HTML page visualizing an agent's result.
+
+    The HTML includes inline CSS and JavaScript — no external dependencies needed.
+    The page renders a gradient header, statistics cards, a message timeline with
+    role-based color coding, and a collapsible raw JSON inspector.
+
     Args:
-        result: The agent.invoke() result dictionary
-        output_path: Optional path to save HTML file. If None, returns HTML string
-    
+        result: The agent.invoke() result dictionary. Expected to contain a
+                'messages' key with a list of dicts, each having 'role' and 'content'.
+        output_path: Optional file path to write the HTML to disk.
+                     If None, the HTML string is returned directly.
+
     Returns:
-        HTML string or file path if saved
+        The absolute file path (str) if output_path is given, otherwise the HTML string.
     """
-    
+
+    # Build the full HTML document as an f-string.
+    # Double curly braces {{ }} are used to escape literal braces in CSS/JS.
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agent Result Visualization</title>
+    <!-- Inline styles — the entire visualization is self-contained in one file -->
     <style>
+        /* Global reset */
         * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }}
         
+        /* Page background with purple gradient */
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
         }}
-        
+
+        /* Main card container — white card centered on gradient background */
         .container {{
             max-width: 1200px;
             margin: 0 auto;
@@ -95,6 +116,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             font-weight: 600;
         }}
         
+        /* Message card — each message gets a colored left border based on role */
         .message {{
             background: #f8f9fa;
             border-left: 4px solid #667eea;
@@ -102,7 +124,8 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             margin-bottom: 15px;
             border-radius: 5px;
         }}
-        
+
+        /* Role-specific color themes: green for user, blue for assistant, yellow for system */
         .message.user {{
             border-left-color: #28a745;
             background: #f0f8f5;
@@ -157,6 +180,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             word-break: break-word;
         }}
         
+        /* Dark-themed code block for displaying code snippets */
         .code-block {{
             background: #2d2d2d;
             color: #f8f8f2;
@@ -169,6 +193,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             margin-top: 10px;
         }}
         
+        /* Light-themed JSON block for structured data display */
         .json-block {{
             background: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -180,6 +205,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             line-height: 1.5;
         }}
         
+        /* Collapsible toggle bar — used for the raw JSON inspector */
         .collapsible {{
             cursor: pointer;
             user-select: none;
@@ -220,6 +246,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             display: block;
         }}
         
+        /* Statistics grid — responsive card layout for summary metrics */
         .stats {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -255,6 +282,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             color: #666;
         }}
         
+        /* Responsive adjustments for mobile/tablet screens */
         @media (max-width: 768px) {{
             .header {{
                 padding: 20px;
@@ -277,6 +305,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
             <p>Interactive view of LangChain/LangGraph agent execution</p>
         </div>
         
+        <!-- Main content area: stats cards, message timeline, and raw JSON -->
         <div class="content">
             {_generate_stats_html(result)}
             {_generate_messages_html(result)}
@@ -289,6 +318,7 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
         </div>
     </div>
     
+    <!-- Toggle script: clicking a collapsible bar shows/hides its sibling content -->
     <script>
         document.querySelectorAll('.collapsible').forEach(el => {{
             el.addEventListener('click', function() {{
@@ -301,9 +331,10 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
 </body>
 </html>"""
     
+    # If an output path is provided, write the HTML to disk; otherwise return the string
     if output_path:
         path = Path(output_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)  # Ensure parent dirs exist
         path.write_text(html_content, encoding='utf-8')
         print(f"✓ Visualization saved to: {path.absolute()}")
         return str(path.absolute())
@@ -312,36 +343,53 @@ def visualize_agent_result(result: Dict[str, Any], output_path: Optional[str] = 
 
 
 def _generate_stats_html(result: Dict[str, Any]) -> str:
-    """Generate statistics section"""
+    """
+    Generate the summary statistics section.
+
+    Produces a responsive grid of metric cards showing:
+      - Total number of messages
+      - Count of user messages
+      - Count of assistant messages
+    """
     msg_count = len(result.get('messages', []))
-    
+
     html = '<div class="section"><div class="stats">'
     html += f'<div class="stat-card"><div class="stat-label">Total Messages</div><div class="stat-value">{msg_count}</div></div>'
-    
+
+    # Count messages by role
     user_msgs = len([m for m in result.get('messages', []) if m.get('role') == 'user'])
     assistant_msgs = len([m for m in result.get('messages', []) if m.get('role') == 'assistant'])
-    
+
     html += f'<div class="stat-card"><div class="stat-label">User Messages</div><div class="stat-value">{user_msgs}</div></div>'
     html += f'<div class="stat-card"><div class="stat-label">Assistant Messages</div><div class="stat-value">{assistant_msgs}</div></div>'
-    
+
     html += '</div></div>'
     return html
 
 
 def _generate_messages_html(result: Dict[str, Any]) -> str:
-    """Generate messages section"""
+    """
+    Generate the message timeline section.
+
+    Each message is rendered as a card with:
+      - A colored role badge (user / assistant / system)
+      - A sequential message index
+      - The message content, formatted as plain text or pretty-printed JSON
+        depending on whether the content is a string, dict, or list.
+    """
     messages = result.get('messages', [])
-    
+
     if not messages:
         return '<div class="section"><div class="section-title">Messages</div><p>No messages found</p></div>'
-    
+
     html = f'<div class="section"><div class="section-title">Messages <span class="section-count">{len(messages)}</span></div>'
-    
+
     for i, msg in enumerate(messages):
         role = msg.get('role', 'unknown')
         content = msg.get('content', '')
-        
-        # Handle different content types
+
+        # Render structured content (dict/list) as pretty-printed JSON;
+        # plain strings are rendered as escaped HTML text.
         if isinstance(content, dict):
             content_str = json.dumps(content, indent=2)
             content_html = f'<div class="json-block"><pre>{_escape_html(content_str)}</pre></div>'
@@ -350,7 +398,8 @@ def _generate_messages_html(result: Dict[str, Any]) -> str:
             content_html = f'<div class="json-block"><pre>{_escape_html(content_str)}</pre></div>'
         else:
             content_html = f'<div class="message-content">{_escape_html(str(content))}</div>'
-        
+
+        # Assemble the message card with role badge and content
         html += f'''
         <div class="message {role}">
             <div class="message-header">
@@ -360,13 +409,20 @@ def _generate_messages_html(result: Dict[str, Any]) -> str:
             {content_html}
         </div>
         '''
-    
+
     html += '</div>'
     return html
 
 
 def _generate_raw_data_html(result: Dict[str, Any]) -> str:
-    """Generate raw data section with collapsible JSON"""
+    """
+    Generate a collapsible raw JSON inspector section.
+
+    The full agent result dictionary is serialized to pretty-printed JSON
+    and placed inside a toggle-able panel so users can inspect the raw data
+    without cluttering the main view. Uses `default=str` to handle
+    non-serializable objects (e.g., datetime) gracefully.
+    """
     raw_json = json.dumps(result, indent=2, default=str)
     
     html = f'''
@@ -386,7 +442,12 @@ def _generate_raw_data_html(result: Dict[str, Any]) -> str:
 
 
 def _escape_html(text: str) -> str:
-    """Escape HTML special characters"""
+    """
+    Escape HTML special characters to prevent XSS and rendering issues.
+
+    Replaces &, <, >, ", and ' with their corresponding HTML entities.
+    The ampersand replacement must come first to avoid double-escaping.
+    """
     return (text
             .replace('&', '&amp;')
             .replace('<', '&lt;')
@@ -397,21 +458,22 @@ def _escape_html(text: str) -> str:
 
 def save_result_to_html(result: Dict[str, Any], filename: str = "agent_result.html") -> str:
     """
-    Convenience function to save result to HTML file
-    
+    Convenience wrapper around visualize_agent_result() that always writes to disk.
+
     Args:
-        result: The agent result dictionary
-        filename: Output filename (relative to current directory or absolute path)
-    
+        result: The agent result dictionary (same format as visualize_agent_result).
+        filename: Output filename — can be a relative or absolute path.
+                  Defaults to "agent_result.html" in the current working directory.
+
     Returns:
-        Path to saved file
+        Absolute path (str) to the saved HTML file.
     """
     return visualize_agent_result(result, output_path=filename)
 
 
-# Example usage
+# --- Entry point for standalone testing ---
 if __name__ == "__main__":
-    # Mock result for testing
+    # Create a minimal mock result that mimics the structure returned by agent.invoke()
     mock_result = {
         "messages": [
             {
@@ -424,7 +486,7 @@ if __name__ == "__main__":
             }
         ]
     }
-    
-    # Generate HTML
+
+    # Generate and save the HTML visualization, then print the output path
     html_path = save_result_to_html(mock_result, "test_result.html")
     print(f"Saved to: {html_path}")

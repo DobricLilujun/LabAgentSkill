@@ -1,24 +1,67 @@
-# All Related evaluation method for LabAgentSkill should be placed here. 
-# For example, if you want to evaluate the accuracy of a classification skill, you can implement a function like `get_predicted_label` to extract the predicted label from the skill's output, and then compare it with the true label to calculate accuracy metrics.
+# =============================================================================
+# Evaluation Utilities for LabAgentSkill
+# =============================================================================
+# This module centralizes all label-extraction and prediction-parsing functions
+# used to evaluate agent/skill outputs across different benchmarks:
+#   - Binary sentiment classification (IMDB): get_predicted_label()
+#   - XBRL financial tag classification (FiNER-139): get_prediction_XBRL_TAGS()
+#   - Insurance yes/no classification (InsurBench): get_insurBench_predicted_label()
+#
+# Each function takes a raw LLM response string and returns a normalized label
+# that can be directly compared against the ground-truth for accuracy computation.
+# =============================================================================
+
 import re
 
 
+# -------------------------------------------------------------------------
+# Sentiment Classification (IMDB)
+# -------------------------------------------------------------------------
 
 def get_predicted_label(message_classification: str) -> str:
-    """Determine predicted label from a classification string."""
+    """
+    Extract a binary sentiment label from an LLM response for the IMDB task.
+
+    Uses a series of heuristic rules applied in priority order:
+      1. If "positive" appears and "negative" does NOT → "positive"
+      2. If "negative" appears and "positive" does NOT → "negative"
+      3. If the response starts with "positive" or "negative" → use that
+         (handles ambiguous cases where both words appear but one leads)
+      4. Otherwise → "unknown"
+
+    Args:
+        message_classification: Raw text response from the agent/LLM.
+
+    Returns:
+        One of "positive", "negative", or "unknown".
+    """
+    # Normalize: handle None, strip whitespace, and lowercase for comparison
     msg_lower = (message_classification or "").strip().lower()
 
+    # Unambiguous cases: only one sentiment keyword present
     if "positive" in msg_lower and "negative" not in msg_lower:
         return "positive"
     if "negative" in msg_lower and "positive" not in msg_lower:
         return "negative"
+
+    # Ambiguous case: both keywords present — use whichever appears first
     if msg_lower.startswith("positive"):
         return "positive"
     if msg_lower.startswith("negative"):
         return "negative"
+
+    # Could not determine sentiment
     return "unknown"
 
 
+
+# -------------------------------------------------------------------------
+# XBRL Tag Classification (FiNER-139)
+# -------------------------------------------------------------------------
+# Complete list of 139 XBRL (eXtensible Business Reporting Language) taxonomy
+# tags used in the FiNER-139 financial NER dataset. These tags represent
+# standardized financial concepts (e.g., revenue, debt, stock compensation)
+# that numeric entities in SEC filings are mapped to.
 
 XBRL_TAGS = [
     "SharebasedCompensationArrangementBySharebasedPaymentAwardAwardVestingRightsPercentage",
@@ -160,39 +203,47 @@ XBRL_TAGS = [
     "LesseeOperatingLeaseRenewalTerm",
     "OperatingLeaseRightOfUseAsset",
     "LossContingencyEstimateOfPossibleLoss",
-]  # 139 tags
+]  # 139 tags total
 
-# Pre-build a case-insensitive lookup: lowercase tag -> original tag
+# Pre-build a case-insensitive lookup dictionary.
+# Maps each lowercased tag to its original CamelCase form, enabling
+# efficient case-insensitive substring searches in get_prediction_XBRL_TAGS().
 _XBRL_TAGS_LOWER = {tag.lower(): tag for tag in XBRL_TAGS}
 
 
 def get_prediction_XBRL_TAGS(message: str) -> str:
-    """Extract a predicted XBRL tag from a model response string.
+    """
+    Extract a predicted XBRL tag from a model response string.
 
-    Matching strategy (applied in order):
-        1. Exact match — scan for any known tag appearing verbatim in the text.
-        2. Case-insensitive match — same scan but ignoring case.
-        3. Longest-substring match — if multiple tags match, prefer the longest
-           one to avoid partial hits (e.g. "Goodwill" vs "GoodwillImpairmentLoss").
+    Matching strategy (applied in order of priority):
+        1. Exact (case-sensitive) substring match across all 139 tags.
+        2. Case-insensitive substring match as a fallback.
+
+    In both stages, if multiple tags match (e.g., "Goodwill" and
+    "GoodwillImpairmentLoss" both appear), the **longest** match is
+    returned to avoid partial/short false positives.
 
     Args:
         message: The raw response string from the agent / LLM.
 
     Returns:
-        The matched XBRL tag name (original casing), or ``"unknown"`` if no
-        tag could be identified.
+        The matched XBRL tag name in its original CamelCase form,
+        or ``"unknown"`` if no tag could be identified.
     """
     if not message:
         return "unknown"
 
     text = message.strip()
 
-    # --- 1. Exact (case-sensitive) match — prefer longest ---
+    # --- Stage 1: Exact (case-sensitive) substring match ---
+    # Collect all tags that appear verbatim in the response text
     exact_matches = [tag for tag in XBRL_TAGS if tag in text]
     if exact_matches:
+        # Return the longest match to avoid partial hits
         return max(exact_matches, key=len)
 
-    # --- 2. Case-insensitive match — prefer longest ---
+    # --- Stage 2: Case-insensitive substring match (fallback) ---
+    # Useful when the LLM returns the tag in a different casing
     text_lower = text.lower()
     ci_matches = [
         original
@@ -202,14 +253,35 @@ def get_prediction_XBRL_TAGS(message: str) -> str:
     if ci_matches:
         return max(ci_matches, key=len)
 
+    # No known XBRL tag found in the response
     return "unknown"
 
 
 
+# -------------------------------------------------------------------------
+# Insurance Yes/No Classification (InsurBench)
+# -------------------------------------------------------------------------
+
+# Pre-compiled word-boundary regex patterns for strict "yes" / "no" matching.
+# Word boundaries (\b) prevent false positives like "yesterday" or "ノート".
 _yes = re.compile(r"\byes\b", re.IGNORECASE)
 _no  = re.compile(r"\bno\b",  re.IGNORECASE)
 
+
 def get_insurBench_predicted_label(message_classification: str) -> str:
+    """
+    Extract a yes/no label from an LLM response for the InsurBench task.
+
+    Uses word-boundary regex to match whole words only, which avoids
+    false positives from substrings (e.g., "yesterday" won't match "yes").
+    If both "yes" and "no" appear, "YES" takes priority.
+
+    Args:
+        message_classification: Raw text response from the agent/LLM.
+
+    Returns:
+        "YES", "NO", or "unknown".
+    """
     s = message_classification.strip()
     if _yes.search(s):
         return "YES"
@@ -219,6 +291,20 @@ def get_insurBench_predicted_label(message_classification: str) -> str:
 
 
 def get_insurBench_predicted_label_v2(message_classification: str) -> str:
+    """
+    Simplified (v2) yes/no label extractor for InsurBench.
+
+    Unlike v1, this uses plain substring matching instead of word-boundary
+    regex. This is more lenient — it will match "yesterday" as "YES" and
+    "notion" as "NO". Use v1 when precision matters; use v2 when recall
+    is more important or responses are well-structured.
+
+    Args:
+        message_classification: Raw text response from the agent/LLM.
+
+    Returns:
+        "YES", "NO", or "unknown".
+    """
     s = message_classification.strip().lower()
     if "yes" in s:
         return "YES"

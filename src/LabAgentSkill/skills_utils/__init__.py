@@ -1,5 +1,7 @@
 """Library for Agent Skills."""
-
+## This module provides utilities for managing and utilizing agent skills, 
+## including error handling, skill properties, parsing, validation, and skill-related operations.
+## This code is partly from https://github.com/agentskills/agentskills/tree/main/skills-ref as the base
 from .errors import ParseError, SkillError, ValidationError
 from .models import SkillProperties
 from .parser import find_skill_md, read_properties
